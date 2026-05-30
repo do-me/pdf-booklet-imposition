@@ -1,5 +1,7 @@
 # Booklet Imposition Tool
 
+<img width="717" height="710" alt="image" src="https://github.com/user-attachments/assets/80ccf8e5-f646-465b-8981-e37f5e08fd77" />
+
 A lightweight, client-side only web application that takes a standard PDF and automatically rearranges the pages ("imposition") so they can be printed double-sided on landscape A4 sheets, folded in half, and bound into an A5 booklet.
 
 ## Features
