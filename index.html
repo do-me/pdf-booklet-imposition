@@ -1,0 +1,519 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Booklet Imposition & Preview</title>
+    <style>
+        :root {
+            --primary: #4a90e2;
+            --primary-hover: #357abd;
+            --bg: #f4f7f6;
+            --text: #333;
+        }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: var(--bg);
+            color: var(--text);
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        h1 { margin-bottom: 10px; text-align: center; }
+        p.description { color: #666; max-width: 600px; text-align: center; line-height: 1.5; margin-bottom: 25px; }
+        
+        #options-panel {
+            background: #fff;
+            padding: 20px 25px;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+            margin-bottom: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: flex-start;
+            gap: 10px;
+            font-size: 1.1rem;
+            color: #444;
+            width: 100%;
+            max-width: 550px;
+            box-sizing: border-box;
+        }
+        
+        .option-row {
+            display: flex;
+            align-items: center;
+        }
+        
+        #options-panel input[type="checkbox"] {
+            width: 18px;
+            height: 18px;
+            cursor: pointer;
+            accent-color: var(--primary);
+            margin-right: 10px;
+        }
+
+        .sub-options {
+            display: none;
+            flex-direction: column;
+            gap: 12px;
+            margin-top: 5px;
+            margin-left: 28px;
+            font-size: 0.95rem;
+            color: #555;
+            padding-top: 10px;
+            border-top: 1px dashed #eee;
+            width: 90%;
+        }
+
+        .sub-options.visible {
+            display: flex;
+        }
+
+        .sub-options label {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .sub-options input[type="number"] {
+            width: 70px;
+            padding: 6px 8px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            font-size: 1rem;
+            text-align: center;
+        }
+
+        #drop-zone {
+            width: 100%;
+            max-width: 550px;
+            height: 150px;
+            border: 3px dashed #ccc;
+            border-radius: 12px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 1.2rem;
+            color: #888;
+            background: #fff;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            margin-bottom: 20px;
+            box-sizing: border-box;
+        }
+        #drop-zone:hover, #drop-zone.dragover {
+            border-color: var(--primary);
+            background: #eef5ff;
+            color: var(--primary);
+        }
+
+        #loading {
+            display: none;
+            font-size: 1.2rem;
+            color: var(--primary);
+            font-weight: bold;
+            margin: 20px 0;
+            animation: pulse 1.5s infinite;
+        }
+
+        @keyframes pulse {
+            0% { opacity: 0.5; }
+            50% { opacity: 1; }
+            100% { opacity: 0.5; }
+        }
+
+        #controls {
+            display: none;
+            margin-bottom: 30px;
+        }
+        button {
+            background-color: var(--primary);
+            color: white;
+            border: none;
+            padding: 15px 30px;
+            font-size: 1.1rem;
+            border-radius: 8px;
+            cursor: pointer;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            transition: background 0.2s;
+        }
+        button:hover { background-color: var(--primary-hover); }
+
+        #preview-container {
+            display: none;
+            width: 100%;
+            max-width: 1000px;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        /* Animated Preview Styles */
+        .spread-card {
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 10px 20px rgba(0,0,0,0.15);
+            margin-bottom: 40px;
+            opacity: 0;
+            transform: perspective(1000px) rotateX(-20deg) scale(0.95);
+            transition: all 0.8s cubic-bezier(0.25, 0.8, 0.25, 1);
+            position: relative;
+        }
+        
+        .spread-card.visible {
+            opacity: 1;
+            transform: perspective(1000px) rotateX(0deg) scale(1);
+        }
+
+        .spread-header {
+            text-align: center;
+            font-weight: bold;
+            margin-bottom: 15px;
+            color: #555;
+            font-size: 1.1rem;
+        }
+
+        .canvas-wrapper {
+            position: relative;
+            box-shadow: 0 0 15px rgba(0,0,0,0.2);
+            border-radius: 4px;
+            overflow: hidden;
+        }
+
+        /* Fold line in the middle */
+        .canvas-wrapper::after {
+            content: '';
+            position: absolute;
+            top: 0;
+            bottom: 0;
+            left: 50%;
+            width: 2px;
+            background: linear-gradient(to bottom, rgba(0,0,0,0) 0%, rgba(0,0,0,0.3) 10%, rgba(0,0,0,0.3) 90%, rgba(0,0,0,0) 100%);
+            transform: translateX(-50%);
+            pointer-events: none;
+        }
+
+        canvas {
+            display: block;
+            max-width: 100%;
+            height: auto;
+        }
+    </style>
+
+    <!-- PDF-Lib for PDF manipulation (Imposition & Page Numbers) -->
+    <script src="https://unpkg.com/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script>
+    <!-- PDF.js for the visual rendered preview -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+</head>
+<body>
+
+    <h1>Booklet Imposition Tool</h1>
+    <p class="description">Upload your standard A4 PDF. This tool automatically arranges the pages ("imposition") so you can print them double-sided on landscape A4 sheets, fold them in the middle, and bind your booklet.</p>
+
+    <div id="options-panel">
+        <div class="option-row">
+            <label style="cursor: pointer; display: flex; align-items: center;">
+                <input type="checkbox" id="add-page-numbers"> 
+                Add page numbers to the bottom center
+            </label>
+        </div>
+        <div class="sub-options" id="sub-options">
+            <label>
+                Start displaying from document page:
+                <input type="number" id="start-doc-page" value="1" min="1">
+            </label>
+            <label>
+                Starting number value:
+                <input type="number" id="start-num-val" value="1" min="1">
+            </label>
+        </div>
+    </div>
+
+    <div id="drop-zone">Drop PDF file here or click to upload</div>
+    <input type="file" id="file-input" accept="application/pdf" style="display:none;">
+
+    <div id="loading">Processing PDF and generating preview...</div>
+
+    <div id="controls">
+        <button id="download-btn">Download Print-Ready PDF</button>
+    </div>
+
+    <div id="preview-container">
+        <h2>Animated Print Spread Preview</h2>
+        <p style="color: #666; margin-bottom: 30px;">This is how the pages will be printed on the A4 sheets. Scroll down to verify all spreads (The dark line indicates the fold).</p>
+        <div id="spreads-view"></div>
+    </div>
+
+    <script>
+        // Configure PDF.js Worker
+        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
+        const dropZone = document.getElementById('drop-zone');
+        const fileInput = document.getElementById('file-input');
+        const loading = document.getElementById('loading');
+        const controls = document.getElementById('controls');
+        const downloadBtn = document.getElementById('download-btn');
+        const previewContainer = document.getElementById('preview-container');
+        const spreadsView = document.getElementById('spreads-view');
+        
+        const addPageNumbersCheckbox = document.getElementById('add-page-numbers');
+        const subOptionsPanel = document.getElementById('sub-options');
+
+        let finalPdfBlobUrl = null;
+
+        // Toggle sub-options visibility
+        addPageNumbersCheckbox.addEventListener('change', (e) => {
+            if (e.target.checked) {
+                subOptionsPanel.classList.add('visible');
+            } else {
+                subOptionsPanel.classList.remove('visible');
+            }
+        });
+
+        // --- Event Listeners for Drag & Drop ---
+        dropZone.addEventListener('click', () => fileInput.click());
+        
+        dropZone.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            dropZone.classList.add('dragover');
+        });
+        
+        dropZone.addEventListener('dragleave', () => {
+            dropZone.classList.remove('dragover');
+        });
+        
+        dropZone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            dropZone.classList.remove('dragover');
+            if (e.dataTransfer.files.length > 0) {
+                handleFile(e.dataTransfer.files[0]);
+            }
+        });
+
+        fileInput.addEventListener('change', (e) => {
+            if (e.target.files.length > 0) {
+                handleFile(e.target.files[0]);
+            }
+        });
+
+        async function handleFile(file) {
+            if (file.type !== 'application/pdf') {
+                alert('Please upload a valid PDF file.');
+                return;
+            }
+
+            // Gather options
+            const options = {
+                addPageNumbers: addPageNumbersCheckbox.checked,
+                startDocPage: parseInt(document.getElementById('start-doc-page').value) || 1,
+                startNumVal: parseInt(document.getElementById('start-num-val').value) || 1
+            };
+
+            // UI Setup for processing
+            dropZone.style.display = 'none';
+            document.getElementById('options-panel').style.display = 'none';
+            loading.style.display = 'block';
+            spreadsView.innerHTML = ''; 
+            controls.style.display = 'none';
+            previewContainer.style.display = 'none';
+
+            try {
+                const arrayBuffer = await file.arrayBuffer();
+                const generatedPdfBytes = await createBooklet(arrayBuffer, options);
+                
+                // Create Download Link
+                const blob = new Blob([generatedPdfBytes], { type: 'application/pdf' });
+                finalPdfBlobUrl = URL.createObjectURL(blob);
+                
+                downloadBtn.onclick = () => {
+                    const a = document.createElement('a');
+                    a.href = finalPdfBlobUrl;
+                    a.download = file.name.replace('.pdf', '_Booklet.pdf');
+                    a.click();
+                };
+
+                // Generate the animated preview
+                await renderPreview(generatedPdfBytes);
+
+                loading.style.display = 'none';
+                controls.style.display = 'block';
+                previewContainer.style.display = 'flex';
+
+            } catch (error) {
+                console.error(error);
+                alert('Error processing the PDF: ' + error.message);
+                loading.style.display = 'none';
+                dropZone.style.display = 'flex';
+                document.getElementById('options-panel').style.display = 'flex';
+            }
+        }
+
+        // --- Imposition Logic (Ausschießen) ---
+        async function createBooklet(inputBuffer, options) {
+            const { PDFDocument, StandardFonts, rgb } = PDFLib;
+            const pdfDoc = await PDFDocument.load(inputBuffer);
+            const numPages = pdfDoc.getPageCount();
+            
+            // A booklet requires a page count divisible by 4. Add blank pages if necessary.
+            const totalPages = Math.ceil(numPages / 4) * 4;
+            
+            const newPdf = await PDFDocument.create();
+            
+            // Standard A4 Landscape Dimensions in points
+            const outWidth = 841.89; 
+            const outHeight = 595.28;
+            const halfWidth = outWidth / 2;
+
+            const embeddedPages = await newPdf.embedPdf(pdfDoc, pdfDoc.getPageIndices());
+
+            // Load Font if page numbers are requested
+            let font;
+            if (options.addPageNumbers) {
+                font = await newPdf.embedFont(StandardFonts.Helvetica);
+            }
+
+            // Loop through all spreads
+            for (let i = 0; i < totalPages / 2; i++) {
+                const page = newPdf.addPage([outWidth, outHeight]);
+                
+                // Calculate which page goes to the left and right halves
+                let leftIndex, rightIndex;
+                if (i % 2 === 0) { // Front side of the sheet
+                    leftIndex = totalPages - 1 - i;
+                    rightIndex = i;
+                } else { // Back side of the sheet
+                    leftIndex = i;
+                    rightIndex = totalPages - 1 - i;
+                }
+
+                // Function to draw a scaled original page onto the half of the A4 sheet
+                const drawHalf = (index, isLeft) => {
+                    if (index < numPages) { // Only draw if it's not a padding blank page
+                        const ep = embeddedPages[index];
+                        // Scale the page to fit into the A5 half (maintaining aspect ratio)
+                        const scale = Math.min(halfWidth / ep.width, outHeight / ep.height);
+                        const scaledW = ep.width * scale;
+                        const scaledH = ep.height * scale;
+                        
+                        // Center it on its respective half
+                        const xOffset = isLeft 
+                            ? (halfWidth - scaledW) / 2 
+                            : halfWidth + (halfWidth - scaledW) / 2;
+                        const yOffset = (outHeight - scaledH) / 2;
+
+                        page.drawPage(ep, {
+                            x: xOffset,
+                            y: yOffset,
+                            width: scaledW,
+                            height: scaledH,
+                        });
+
+                        // Draw Page Numbers based on User Settings
+                        if (options.addPageNumbers) {
+                            const originalPageNum = index + 1; // 1-based index
+                            
+                            // Check if this page should receive a page number
+                            if (originalPageNum >= options.startDocPage) {
+                                // Calculate the printed number value
+                                const printNumber = options.startNumVal + (originalPageNum - options.startDocPage);
+                                const pageNumberStr = String(printNumber);
+                                
+                                const fontSize = 11;
+                                const textWidth = font.widthOfTextAtSize(pageNumberStr, fontSize);
+                                
+                                // Center horizontally in the A5 half
+                                const textX = isLeft 
+                                    ? (halfWidth - textWidth) / 2 
+                                    : halfWidth + (halfWidth - textWidth) / 2;
+                                
+                                // 25 points from the bottom edge
+                                const textY = 25; 
+
+                                page.drawText(pageNumberStr, {
+                                    x: textX,
+                                    y: textY,
+                                    size: fontSize,
+                                    font: font,
+                                    color: rgb(0.3, 0.3, 0.3) // Dark gray
+                                });
+                            }
+                        }
+                    }
+                };
+
+                drawHalf(leftIndex, true);   // Draw left side
+                drawHalf(rightIndex, false); // Draw right side
+            }
+
+            return await newPdf.save();
+        }
+
+        // --- Visual Animated Preview Logic (PDF.js) ---
+        async function renderPreview(pdfBytes) {
+            const loadingTask = pdfjsLib.getDocument({ data: pdfBytes });
+            const pdf = await loadingTask.promise;
+            const totalSpreads = pdf.numPages;
+
+            for (let pageNum = 1; pageNum <= totalSpreads; pageNum++) {
+                const page = await pdf.getPage(pageNum);
+                
+                // Higher scale for sharper view
+                const viewport = page.getViewport({ scale: 1.5 }); 
+                
+                // Create UI Elements
+                const card = document.createElement('div');
+                card.className = 'spread-card';
+                
+                const header = document.createElement('div');
+                header.className = 'spread-header';
+                
+                // Label (Sheet X - Front/Back)
+                const sheetNumber = Math.ceil(pageNum / 2);
+                const side = (pageNum % 2 !== 0) ? 'Front' : 'Back';
+                header.innerText = `Sheet ${sheetNumber} - ${side}`;
+
+                const wrapper = document.createElement('div');
+                wrapper.className = 'canvas-wrapper';
+
+                const canvas = document.createElement('canvas');
+                const context = canvas.getContext('2d');
+                canvas.width = viewport.width;
+                canvas.height = viewport.height;
+
+                // Render PDF page into Canvas
+                await page.render({ canvasContext: context, viewport: viewport }).promise;
+
+                wrapper.appendChild(canvas);
+                card.appendChild(header);
+                card.appendChild(wrapper);
+                spreadsView.appendChild(card);
+            }
+
+            // Initialize scroll animations
+            setupAnimations();
+        }
+
+        function setupAnimations() {
+            const cards = document.querySelectorAll('.spread-card');
+            
+            const observer = new IntersectionObserver((entries) => {
+                entries.forEach(entry => {
+                    if (entry.isIntersecting) {
+                        // Small delay for a nice falling effect
+                        setTimeout(() => {
+                            entry.target.classList.add('visible');
+                        }, 100);
+                        observer.unobserve(entry.target);
+                    }
+                });
+            }, {
+                threshold: 0.15 // Triggers when 15% of the element is visible
+            });
+
+            cards.forEach(card => observer.observe(card));
+        }
+    </script>
+</body>
+</html>
